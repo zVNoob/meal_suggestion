@@ -4,40 +4,87 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 
-#Source: https://www.geeksforgeeks.org/reinforcement-learning-using-pytorch/
+#Source: https://github.com/tsmatz/reinforcement-learning-tutorials/blob/master/01-dqn.ipynb
 
 class DQN(nn.Module):
-    def __init__(self, input_size, output_size):
+    def __init__(self, input_size, output_size, source = None):
         super().__init__()
-        self.fc1 = nn.Linear(input_size, 64)
-        self.fc2 = nn.Linear(64, 64)
-        self.fc3 = nn.Linear(64, output_size)
-        self.softmax = nn.Softmax(dim=-1)
+        self.hidden1 = nn.Linear(input_size, 64)
+        self.hidden2 = nn.Linear(64, 64)
+        self.output = nn.Linear(64, output_size)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.to(self.device)
-        self.optimizer = optim.Adam(self.parameters(), lr=10)
+        if source:
+            self.load_state_dict(source.state_dict())
+        else:
+            self.optimizer = optim.Adam(self.parameters(), lr=0.001)
 
     def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return self.softmax(x)
-    def _compute_discounted_rewards(self,rewards:list, gamma=0.99):
-        discounted_rewards = []
-        R = 0
-        for r in reversed(rewards):
-            R = r + gamma * R
-            discounted_rewards.insert(0, R)
-        discounted_rewards = torch.tensor(discounted_rewards)
-        discounted_rewards = (discounted_rewards - discounted_rewards.mean()) / (discounted_rewards.std() + 1e-5)
-        return discounted_rewards
+        x = F.relu(self.hidden1(x))
+        x = F.relu(self.hidden2(x))
+        x = self.output(x)
+        return x
+    def optimize(self, target, states, actions, rewards, next_states, dones):
+        #
+        # Compute target
+        #
 
-    def optimize(self,log_probs:list,rewards:list):
-        discounted_rewards = self._compute_discounted_rewards(rewards)
-        policy_loss = list[Tensor]()
-        for log_prob, Gt in zip(log_probs, discounted_rewards):
-            policy_loss.append(-log_prob * Gt)
+        with torch.no_grad():
+            # compute Q(s_{t+1})                               : size=[batch_size, 2]
+            target_vals_for_all_actions = target(next_states.unsqueeze(dim=0))  
+            # compute argmax_a Q(s_{t+1})                      : size=[batch_size]
+            target_actions = torch.argmax(target_vals_for_all_actions, 1)
+            # compute max Q(s_{t+1})                           : size=[batch_size]
+            target_actions_one_hot = F.one_hot(target_actions, self.output.out_features).float()
+            target_vals = torch.sum(target_vals_for_all_actions * target_actions_one_hot, 1)
+            # compute r_t + gamma * (1 - d_t) * max Q(s_{t+1}) : size=[batch_size]
+            target_vals_masked = (1.0 - dones) * target_vals
+            q_vals1 = rewards + 0.99 * target_vals_masked
+
         self.optimizer.zero_grad()
-        policy_loss = torch.cat([i.reshape(1) for i in policy_loss]).sum()
-        policy_loss.backward()
+
+        #
+        # Compute q-value
+        #
+        actions_one_hot = F.one_hot(actions, self.output.out_features).float()
+        q_vals2 = torch.sum(self(states).unsqueeze(dim=0) * actions_one_hot, 1)
+
+        #
+        # Get MSE loss and optimize
+        #
+        loss = F.mse_loss(
+            q_vals1.detach(),
+            q_vals2,
+            reduction="mean")
+        loss.backward()
         self.optimizer.step()
+
+    def pick_sample(self,state, epsilon):
+        with torch.no_grad():
+        # get optimal action,
+        # but with greedy exploration (to prevent picking up same values in the first stage)
+            if np.random.random() > epsilon:
+                s_batch = state.clone().detach()
+                s_batch = s_batch.unsqueeze(dim=0)  # to make batch with size=1
+                q_vals_for_all_actions = self(s_batch)
+                a = torch.argmax(q_vals_for_all_actions, 1)
+                a = a.squeeze(dim=0)
+                a = a.item()
+            else:
+                a = np.random.randint(0, self.output.out_features)
+        return a
+
+    def evaluate(self,env,epsilon = 0.0,memory = None):
+        with torch.no_grad():
+            state = env.reset()
+            done = False
+            total = 0
+            while not done:
+                a = self.pick_sample(state, epsilon)
+                s_next, reward, done = env.step(a)
+                if memory:
+                    memory.add([state.tolist(), a, reward, s_next.tolist(), float(done)])
+                total += reward
+                state = s_next
+        return total
+
