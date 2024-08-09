@@ -40,7 +40,7 @@ while 1:
     # training
     while Memory.length() < 2000:
         Network.evaluate(Environment, epsilon, Memory)
-    for _ in range(500):
+    for _ in range(10):
         Network.evaluate(Environment, epsilon, Memory)
     states, actions, rewards, n_states, dones = Memory.sample()
     for j in range(len(actions)):

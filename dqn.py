@@ -7,11 +7,16 @@ import numpy as np
 #Source: https://github.com/tsmatz/reinforcement-learning-tutorials/blob/master/01-dqn.ipynb
 
 class DQN(nn.Module):
-    def __init__(self, input_size, output_size, source = None):
+    def __init__(self, input_size, output_size, source = None, hidden_layers_num = 2):
         super().__init__()
-        self.hidden1 = nn.Linear(input_size, 64)
-        self.hidden2 = nn.Linear(64, 64)
-        self.output = nn.Linear(64, output_size)
+        size_divided = (output_size - input_size) // (hidden_layers_num + 1)
+        self.hidden = []
+        for i in range(hidden_layers_num):
+            in_size = i * size_divided + input_size
+            out_size = (i + 1) * size_divided + input_size
+            self.hidden.append(nn.Linear(in_size, out_size))
+
+        self.output = nn.Linear(hidden_layers_num * size_divided + input_size, output_size)
         self.device = torch.device("cuda" if torch.cuda.is_available() else 
                                    "xpu" if torch.xpu.is_available() else 
                                    "cpu")
@@ -22,8 +27,8 @@ class DQN(nn.Module):
             self.optimizer = optim.Adam(self.parameters(), lr=0.001)
 
     def forward(self, x):
-        x = F.relu(self.hidden1(x))
-        x = F.relu(self.hidden2(x))
+        for i in self.hidden:
+            x = F.relu(i(x))
         x = self.output(x)
         return x
     def optimize(self, target, states, actions, rewards, next_states, dones):
