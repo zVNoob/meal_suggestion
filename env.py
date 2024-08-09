@@ -43,7 +43,6 @@ class Env:
                                               int(price),
                                               float(i["protein"] + j[1][2]),
                                               float(i["fat"] + j[1][1]),
-                                              float(i["carbohydrate"] + j[1][3]),
                                               not bool(np.isnan(i["terminal"]))))
 
     def size(self):
@@ -52,12 +51,11 @@ class Env:
     def reset(self) -> torch.Tensor:
         self.money = self.initial_money
         self.prev_dish = self.prev_dish.new_zeros(self.history_size).float()
-        self.cacbonhidrate = 0
         self.protein = 0
         self.fat = 0
         self.meal = []
 
-        return torch.cat((torch.Tensor([self.money]).to(self.device).float(),self.prev_dish));
+        return self.cat()
 
     def cat(self):
         return torch.cat((torch.Tensor([self.money]).to(self.device).float(),self.prev_dish))
@@ -75,7 +73,7 @@ class Env:
         for i in range(self.max_dish_per_meal):
             if self.prev_dish[i] == output:
                 reward -= 1000
-            if self.lookup_table[output][5]:
+            if self.lookup_table[output][4]:
                 enough = True
                 break
         if not enough:
@@ -86,43 +84,36 @@ class Env:
 
         if self.money <= 0:
             if show:
-                print(self.meal,self.money,self.cacbonhidrate,self.protein,self.fat)
+                print(self.meal,self.money,self.protein,self.fat)
             return self.cat(), reward, True
 
 
         # check for nutrition
-        self.cacbonhidrate += self.lookup_table[output][2]
-        self.protein += self.lookup_table[output][3]
-        self.fat += self.lookup_table[output][4]
+        self.protein += self.lookup_table[output][2]
+        self.fat += self.lookup_table[output][3]
 
         # over-nutrient
-        if self.cacbonhidrate > 30:
-            reward -= (self.cacbonhidrate - 30) / 5
 
-        if self.protein > 130:
-            reward -= (self.protein - 130) / 10
+        if self.protein > 300:
+            reward -= (self.protein - 300) / 10
 
-        if self.fat > 101.4:
-            reward -= (self.fat - 101.4) / 7.5
+        if self.fat > 102:
+            reward -= (self.fat - 102) / 7.5
 
-        if self.lookup_table[output][5]:
+        if self.lookup_table[output][4]:
             # a meal is done
             # print for each meal
             if show:
-                print(self.meal,self.money,self.cacbonhidrate,self.protein,self.fat)
+                print(self.meal,self.money,self.protein,self.fat)
             self.meal = []
-            # check for over-nutrient
-            if self.cacbonhidrate > 30:
-                reward -= (self.cacbonhidrate - 30) / 5
             # check for under-nutrient
-            if self.protein < 48:
-                reward -= (48 - self.protein) / 5
-            if self.fat < 57:
-                reward -= (57 - self.fat) / 10
+            if self.protein < 96:
+                reward -= (96 - self.protein) / 5
+            if self.fat < 114:
+                reward -= (114 - self.fat) / 10
             # reset for each meal
             self.protein = max(0, self.protein - 130)
             self.fat = max(0, self.fat - 101.4)
-            self.cacbonhidrate = max(0, self.cacbonhidrate - 30)
 
         return self.cat(), 60 + reward, False
  

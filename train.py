@@ -9,6 +9,7 @@ import replay
 import os
 import sys
 import torch
+import numpy
 
 clear = lambda: os.system('cls') if os.name == 'win32' else os.system('clear')
 
@@ -26,10 +27,17 @@ epsilon_final = 0.1
 
 count = 0
 
+reward_record = []
+
 while 1:
+    # show current output
     clear()
     total_reward = Network.evaluate(Environment)
+    if len(reward_record) > 200:
+        reward_record.pop(0)
+    reward_record.append(total_reward)
     print(total_reward)
+    # training
     while Memory.length() < 2000:
         Network.evaluate(Environment, epsilon, Memory)
     for _ in range(500):
@@ -43,6 +51,12 @@ while 1:
     if count % 100 == 0:
         Target.load_state_dict(Network.state_dict())
         count = 0
+    if numpy.average(reward_record) > 1000:
+        reward_record = []
+        Environment.initial_money += 100000
+        if Environment.initial_money >= 5100000:
+            break
+
     try:
         os.read(sys.stdin.fileno(), 1)
         break
