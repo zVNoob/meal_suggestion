@@ -12,7 +12,7 @@ import torch
 
 clear = lambda: os.system('cls') if os.name == 'win32' else os.system('clear')
 
-#os.set_blocking(sys.stdin.fileno(), False)
+os.set_blocking(sys.stdin.fileno(), False)
 
 Environment = env.Env(100000, 3, 15)
 Network = dqn.DQN(Environment.size()[0], Environment.size()[1])
@@ -27,26 +27,27 @@ epsilon_final = 0.1
 count = 0
 
 while 1:
+    clear()
+    total_reward = Network.evaluate(Environment)
+    print(total_reward)
     while Memory.length() < 2000:
+        Network.evaluate(Environment, epsilon, Memory)
+    for _ in range(500):
         Network.evaluate(Environment, epsilon, Memory)
     states, actions, rewards, n_states, dones = Memory.sample()
     for j in range(len(actions)):
         Network.optimize(Target,states[j], actions[j], rewards[j], n_states[j], dones[j])
-    total_reward = Network.evaluate(Environment)
     if epsilon - epsilon_decay >= epsilon_final:
         epsilon -= epsilon_decay
     count += 1
     if count % 100 == 0:
         Target.load_state_dict(Network.state_dict())
         count = 0
-    input()
-    clear()
-    print(total_reward)
-    # try:
-    #     os.read(sys.stdin.fileno(), 1)
-    #     break
-    # except:
-    #     pass
+    try:
+        os.read(sys.stdin.fileno(), 1)
+        break
+    except:
+        pass
 
 torch.save(Network.state_dict(), 'model.pth')
 

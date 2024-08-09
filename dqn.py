@@ -66,8 +66,7 @@ class DQN(nn.Module):
         # get optimal action,
         # but with greedy exploration (to prevent picking up same values in the first stage)
             if np.random.random() > epsilon:
-                s_batch = state.clone().detach()
-                s_batch = s_batch.unsqueeze(dim=0)  # to make batch with size=1
+                s_batch = state.unsqueeze(dim=0)  # to make batch with size=1
                 q_vals_for_all_actions = self(s_batch)
                 a = torch.argmax(q_vals_for_all_actions, 1)
                 a = a.squeeze(dim=0)
@@ -83,7 +82,7 @@ class DQN(nn.Module):
             total = 0
             while not done:
                 a = self.pick_sample(state, epsilon)
-                s_next, reward, done = env.step(a)
+                s_next, reward, done = env.step(a,False if memory else True)
                 if memory:
                     memory.add([state.tolist(), a, reward, s_next.tolist(), float(done)])
                 total += reward

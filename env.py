@@ -9,10 +9,10 @@ cook_mode = {
     #name : (price,cacbonhidrate,fat,protein)
     "luộc": (10,0,0,0),
     "hấp": (30,0,0,0),
-    "nướng": (2000,0,0,-10),
+    "nướng": (3000,-0.1,-0.1,-0.1),
     "rán": (200,0,10,0),
-    "rang": (150,0,8,0),
-    "xào": (158,0,5,0),
+    "rang": (150,0,3,0),
+    "xào": (158,0,1,0),
     "raw": (0,0,0,0),
 }
 
@@ -45,8 +45,6 @@ class Env:
                                               float(i["fat"] + j[1][1]),
                                               float(i["carbohydrate"] + j[1][3]),
                                               not bool(np.isnan(i["terminal"]))))
-        print(self.lookup_table)
-        input()
 
     def size(self):
         return (1 + self.history_size, len(self.lookup_table))
@@ -57,6 +55,7 @@ class Env:
         self.cacbonhidrate = 0
         self.protein = 0
         self.fat = 0
+        self.meal = []
 
         return torch.cat((torch.Tensor([self.money]).to(self.device).float(),self.prev_dish));
 
@@ -64,29 +63,32 @@ class Env:
         return torch.cat((torch.Tensor([self.money]).to(self.device).float(),self.prev_dish))
 
     def push_history(self,output):
+        self.meal.append(self.lookup_table[output][0])
         self.prev_dish = self.prev_dish.roll(1)
         self.prev_dish[0] = output
 
-    def step(self,output) -> tuple[torch.Tensor, float, bool]:
-        dish_name = self.lookup_table[output][0]
-        self.money -= self.lookup_table[output][1]
-
-        print(dish_name,flush= True)
-
-        if self.money <= 0:
-            return self.cat(), 0, True
+    def step(self,output,show = True) -> tuple[torch.Tensor, float, bool]:
         
         reward = 0
         #Check for duplicate and terminal
         enough = False
         for i in range(self.max_dish_per_meal):
             if self.prev_dish[i] == output:
-                reward -= 50
+                reward -= 1000
             if self.lookup_table[output][5]:
                 enough = True
                 break
         if not enough:
-            reward -= 100
+            reward -= 200
+        self.push_history(output)
+
+        self.money -= self.lookup_table[output][1]
+
+        if self.money <= 0:
+            if show:
+                print(self.meal,self.money,self.cacbonhidrate,self.protein,self.fat)
+            return self.cat(), reward, True
+
 
         # check for nutrition
         self.cacbonhidrate += self.lookup_table[output][2]
@@ -105,6 +107,13 @@ class Env:
 
         if self.lookup_table[output][5]:
             # a meal is done
+            # print for each meal
+            if show:
+                print(self.meal,self.money,self.cacbonhidrate,self.protein,self.fat)
+            self.meal = []
+            # check for over-nutrient
+            if self.cacbonhidrate > 30:
+                reward -= (self.cacbonhidrate - 30) / 5
             # check for under-nutrient
             if self.protein < 48:
                 reward -= (48 - self.protein) / 5
@@ -115,7 +124,5 @@ class Env:
             self.fat = max(0, self.fat - 101.4)
             self.cacbonhidrate = max(0, self.cacbonhidrate - 30)
 
-
-        self.push_history(output)
-        return self.cat(), 6 + 14 * (self.money / self.initial_money) + reward, False
+        return self.cat(), 60 + reward, False
  
