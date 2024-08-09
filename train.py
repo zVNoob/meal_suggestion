@@ -12,7 +12,7 @@ import torch
 
 clear = lambda: os.system('cls') if os.name == 'win32' else os.system('clear')
 
-os.set_blocking(sys.stdin.fileno(), False)
+#os.set_blocking(sys.stdin.fileno(), False)
 
 Environment = env.Env(100000, 3, 15)
 Network = dqn.DQN(Environment.size()[0], Environment.size()[1])
@@ -39,13 +39,14 @@ while 1:
     if count % 100 == 0:
         Target.load_state_dict(Network.state_dict())
         count = 0
+    input()
     clear()
     print(total_reward)
-    try:
-        os.read(sys.stdin.fileno(), 1)
-        break
-    except:
-        pass
+    # try:
+    #     os.read(sys.stdin.fileno(), 1)
+    #     break
+    # except:
+    #     pass
 
 torch.save(Network.state_dict(), 'model.pth')
 

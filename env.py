@@ -1,40 +1,63 @@
 
 import torch
 from torch.functional import Tensor
-from collections import defaultdict
 
-ingredient = {
-    "gạo": 1000,
-    "cá": 1000,
-    "thịt gà":2000,
-}
-ingredient = defaultdict(lambda: 0, ingredient)
+import pandas as pd
+import numpy as np
+
 cook_mode = {
-    "luộc": 100,
-    "nướng": 1000,
-    "rán":800,
-}
-cook_mode = defaultdict(lambda: 0, cook_mode)
-non_exist_dish = ["cá luộc"]
-special_dish = {
-    "gạo luộc": ("cơm",1000),
-    "gạo nướng": ("bún",15000),
+    #name : (price,cacbonhidrate,fat,protein)
+    "luộc": (10,0,0,0),
+    "hấp": (30,0,0,0),
+    "nướng": (2000,0,0,-10),
+    "rán": (200,0,10,0),
+    "rang": (150,0,8,0),
+    "xào": (158,0,5,0),
+    "raw": (0,0,0,0),
 }
 
 class Env:
     def __init__(self,initial_money:int,max_dish_per_meal:int,history_size:int) -> None:
+        if max_dish_per_meal > history_size:
+            raise Exception("You can't have more max_dish_per_meal than history_size")
         self.initial_money=initial_money
         self.max_dish_per_meal=max_dish_per_meal
         self.history_size=history_size
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda" if torch.cuda.is_available() else
+                                   "xpu" if torch.xpu.is_available() else
+                                   "cpu")
         self.prev_dish = Tensor().to(self.device).new_zeros(history_size).float()
-        self.lookup_table = [(i + ' ' + j,i,j) for i in ingredient for j in cook_mode]
+        # initalize lookup table
+        self.lookup_table = []
+        temp = pd.read_csv("data.csv")
+        pd.set_option('future.no_silent_downcasting', True)
+        temp = temp.replace(r'^\s*$', np.nan, regex=True)
+        for _,i in temp.iterrows():
+            for j in cook_mode.items():
+                t = i[j[0]]
+                if np.isnan(t) == False:
+                    price = i["price"] + j[1][0]
+                    if t != 0:
+                        price = t
+                    self.lookup_table.append((i["name"] + ' ' + (j[0] if j[0] != "raw" else ""),
+                                              int(price),
+                                              float(i["protein"] + j[1][2]),
+                                              float(i["fat"] + j[1][1]),
+                                              float(i["carbohydrate"] + j[1][3]),
+                                              not bool(np.isnan(i["terminal"]))))
+        print(self.lookup_table)
+        input()
+
     def size(self):
-        return (1 + self.history_size, len(ingredient) * len(cook_mode))
+        return (1 + self.history_size, len(self.lookup_table))
 
     def reset(self) -> torch.Tensor:
         self.money = self.initial_money
         self.prev_dish = self.prev_dish.new_zeros(self.history_size).float()
+        self.cacbonhidrate = 0
+        self.protein = 0
+        self.fat = 0
+
         return torch.cat((torch.Tensor([self.money]).to(self.device).float(),self.prev_dish));
 
     def cat(self):
@@ -43,28 +66,56 @@ class Env:
     def push_history(self,output):
         self.prev_dish = self.prev_dish.roll(1)
         self.prev_dish[0] = output
+
     def step(self,output) -> tuple[torch.Tensor, float, bool]:
         dish_name = self.lookup_table[output][0]
-        if dish_name in non_exist_dish:
-            return self.cat(), -400, True
+        self.money -= self.lookup_table[output][1]
 
-        if dish_name in special_dish:
-            self.money -= special_dish[self.lookup_table[output][0]][1]
-            dish_name = special_dish[self.lookup_table[output][0]][0]
-        else:
-            self.money -= ingredient[self.lookup_table[output][1]]
-            self.money -= cook_mode[self.lookup_table[output][2]]
-
-        print(dish_name,self.money,flush= True)
+        print(dish_name,flush= True)
 
         if self.money <= 0:
             return self.cat(), 0, True
-
+        
+        reward = 0
+        #Check for duplicate and terminal
+        enough = False
         for i in range(self.max_dish_per_meal):
             if self.prev_dish[i] == output:
-                self.push_history(output)
-                return self.cat(), -200, False
+                reward -= 50
+            if self.lookup_table[output][5]:
+                enough = True
+                break
+        if not enough:
+            reward -= 100
+
+        # check for nutrition
+        self.cacbonhidrate += self.lookup_table[output][2]
+        self.protein += self.lookup_table[output][3]
+        self.fat += self.lookup_table[output][4]
+
+        # over-nutrient
+        if self.cacbonhidrate > 30:
+            reward -= (self.cacbonhidrate - 30) / 5
+
+        if self.protein > 130:
+            reward -= (self.protein - 130) / 10
+
+        if self.fat > 101.4:
+            reward -= (self.fat - 101.4) / 7.5
+
+        if self.lookup_table[output][5]:
+            # a meal is done
+            # check for under-nutrient
+            if self.protein < 48:
+                reward -= (48 - self.protein) / 5
+            if self.fat < 57:
+                reward -= (57 - self.fat) / 10
+            # reset for each meal
+            self.protein = max(0, self.protein - 130)
+            self.fat = max(0, self.fat - 101.4)
+            self.cacbonhidrate = max(0, self.cacbonhidrate - 30)
+
 
         self.push_history(output)
-        return self.cat(), 30, False
+        return self.cat(), 6 + 14 * (self.money / self.initial_money) + reward, False
  

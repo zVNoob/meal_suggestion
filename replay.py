@@ -1,15 +1,16 @@
 import random
 import torch
 
-sampling_size = 64 * 30
-batch_size = 64
+#Source: https://github.com/tsmatz/reinforcement-learning-tutorials/blob/master/01-dqn.ipynb
 
 
 class replayMemory:
     def __init__(self, buffer_size: int):
         self.buffer_size = buffer_size
         self.buffer = []
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda" if torch.cuda.is_available() else
+                                   "xpu" if torch.xpu.is_available() else 
+                                   "cpu")
 
     def add(self, item):
         if len(self.buffer) == self.buffer_size:
@@ -18,7 +19,7 @@ class replayMemory:
 
     def sample(self):
         # sampling
-        items = random.sample(self.buffer, sampling_size)
+        items = random.sample(self.buffer, len(self.buffer)//3)
         # divide each columns
         states   = [i[0] for i in items]
         actions  = [i[1] for i in items]

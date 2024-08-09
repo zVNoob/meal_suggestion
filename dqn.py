@@ -1,4 +1,4 @@
-from torch import Tensor, nn
+from torch import nn
 from torch import optim
 import torch
 import torch.nn.functional as F
@@ -12,7 +12,9 @@ class DQN(nn.Module):
         self.hidden1 = nn.Linear(input_size, 64)
         self.hidden2 = nn.Linear(64, 64)
         self.output = nn.Linear(64, output_size)
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda" if torch.cuda.is_available() else 
+                                   "xpu" if torch.xpu.is_available() else 
+                                   "cpu")
         self.to(self.device)
         if source:
             self.load_state_dict(source.state_dict())
