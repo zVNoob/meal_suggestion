@@ -15,13 +15,13 @@ clear = lambda: os.system('cls') if os.name == 'win32' else os.system('clear')
 
 os.set_blocking(sys.stdin.fileno(), False)
 
-Environment = env.Env(100000, 3, 15)
+Environment = env.Env(1000000, 3, 15)
 Network = dqn.DQN(Environment.size()[0], Environment.size()[1])
 Target = dqn.DQN(Environment.size()[0], Environment.size()[1],Network)
 Memory = replay.replayMemory(10000)
 
 epsilon = 1.0
-epsilon_decay = epsilon / 10000
+epsilon_decay = epsilon / 3000
 epsilon_final = 0.1
 
 
