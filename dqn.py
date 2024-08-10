@@ -7,7 +7,7 @@ import numpy as np
 #Source: https://github.com/tsmatz/reinforcement-learning-tutorials/blob/master/01-dqn.ipynb
 
 class DQN(nn.Module):
-    def __init__(self, input_size, output_size, source = None, hidden_layers_num = 2):
+    def __init__(self, input_size, output_size, source = None, hidden_layers_num = 3):
         super().__init__()
         size_divided = (output_size - input_size) // (hidden_layers_num + 1)
         self.hidden = []
